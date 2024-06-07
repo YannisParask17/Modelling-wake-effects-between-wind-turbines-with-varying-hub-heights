@@ -38,7 +38,7 @@ class wind_farm_layout:
         self.Sx     = Sx
         self.Sy     = Sy
 
-    def get_wt_locations(self):
+    def get_wt_locations(self, vertically_staggered=False):
 
         wt_x_norm = np.arange(0, self.nrows*self.Sx, self.Sx)
         wt_y_norm = np.arange(0, self.ncols*self.Sy, self.Sy)
@@ -56,6 +56,23 @@ class wind_farm_layout:
         wt_y = np.array(wt_y)
         self.wt_x   =   wt_x * self.Dref 
         self.wt_y   =   wt_y * self.Dref
+
+        wt_x_VS = []
+        wt_y_VS = [] 
+        if vertically_staggered:
+            for y in wt_y_norm:
+                for x in wt_x_norm[:-1]:
+                    wt_x_VS.append(x+self.Sx/2)
+                    wt_y_VS.append(y)
+        wt_x_VS = np.array(wt_x_VS)
+        wt_y_VS = np.array(wt_y_VS)
+        
+
+        self.wt_x       =   wt_x * self.Dref 
+        self.wt_y       =   wt_y * self.Dref
+        self.wt_x_VS    =   wt_x_VS * self.Dref   
+        self.wt_y_VS    =   wt_y_VS * self.Dref
+
         
         
     def visualise_wf(self, normalised=True):
@@ -78,6 +95,7 @@ class wind_farm_layout:
 
         plt.figure
         plt.plot(self.wt_x/normalise, self.wt_y/normalise, 'ob')
+        plt.plot(self.wt_x_VS/normalise, self.wt_y_VS/normalise, 'or')
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
         # plt.plot(wt_x_VS/D, wt_y_VS/D, 'or')
@@ -87,5 +105,5 @@ class wind_farm_layout:
 
 if __name__ == '__main__':
     wf_layout = wind_farm_layout(4,4,90, Sx=5, Sy=2.5)
-    wf_layout.get_wt_locations()
+    wf_layout.get_wt_locations(True)
     wf_layout.visualise_wf(normalised=False)
