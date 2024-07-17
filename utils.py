@@ -220,7 +220,7 @@ class precursor_post:
                 axs[ivar].set_xlabel(xlabel)
 
         axs[0].set_ylabel(r'$z$ [m]')
-        axs[-1].set_ylim(0,2000)
+        axs[-1].set_ylim(0,1200)
 
         if Dref and zref:
             rotor_upper = zref + Dref/2
@@ -279,16 +279,22 @@ class windfarm_post():
 
         wt_x    = wind_farm.wt_x
         wt_y    = wind_farm.wt_y
-        # wt_x_VS = wind_farm.wt_x_VS
-        # wt_y_VS = wind_farm.wt_y_VS
-        wt_x_VS = False
-        wt_y_VS = False
+        if hasattr(wind_farm, 'wt_x_VS') and hasattr(wind_farm, 'wt_y_VS'):
+            wt_x_VS = wind_farm.wt_x_VS
+            wt_y_VS = wind_farm.wt_y_VS
+            D_VS    = wind_farm.D_VS
+            z_VS    = wind_farm.z_VS
+        else:
+            wt_x_VS = False
+            wt_y_VS = False
+            D_VS    = False
+            z_VS    = False
 
-        folder  = f'run_{case}_{forcemethod}_{turbmodel}_{cells_D}cD_Ti{Ti}_zeta0_wdGrid270/post_flow_wd270_ws10/'
+        folder  = f'run_{case}_{forcemethod}_{turbmodel}_{cells_D}cD_Ti{Ti}_zeta0_wdGrid270/post_flow_wd90_ws10/'
         infile  = folder + 'flowdata.nc'
         data    = xarray.open_dataset(infile)
         flowvarnames = list(data.keys())
-
+        
         self.wf_results[case] = {'Uinf'         : Uinf,
                                  'TI'           : Ti,
                                  'forcemethod'  : forcemethod,
@@ -296,13 +302,15 @@ class windfarm_post():
                                  'cells_D'      : cells_D,
                                  'wt_x'         : wt_x,
                                  'wt_y'         : wt_y,
+                                 'Dref'         : Dref,
+                                 'zref'         : wind_farm.zref,
                                  'wt_x_VS'      : wt_x_VS,
                                  'wt_y_VS'      : wt_y_VS,
-                                 'Dref'         : Dref,
+                                 'D_VS'         : D_VS,
+                                 'z_VS'         : z_VS,
                                  'data'         : data}
         
-        # for ivar, var in enumerate(flowvarnames):
-        #     self.wf_results[case][var] = data.variables[var]
+
         
     def compute_spanwise_average(self, case):
         """
@@ -316,7 +324,6 @@ class windfarm_post():
 
         # 
         data            = self.wf_results[case]['data']
-        flowvarnames    = list(data.keys())
 
         mask = (data.y >= self.wf_results[case]['wt_y'].min() - self.wf_results[case]['Dref']/2) & (data.y <= self.wf_results[case]['wt_y'].max() + self.wf_results[case]['Dref']/2)
         print('computing spanwise average flow field over wind farm width')
@@ -324,6 +331,10 @@ class windfarm_post():
         if 'Umag' not in data.variables:
             data['Umag'] = np.sqrt(data.U**2 + data.V**2)
 
+        if 'duw_dz' not in data.variables:
+            data['duw_dz'] = data['uw'].differentiate("z")
+        
+        flowvarnames    = list(data.keys())
         for ivar, var in enumerate(flowvarnames):
             print('computing average: ', var)
             data[f'{var}_avg']    = np.mean(data[var].where(mask, drop=True), axis = 1)
@@ -372,7 +383,7 @@ class windfarm_post():
         yloc = self.wf_results[case]['wt_y']
         Ntx  = len(xloc)
         Nty  = len(yloc)
-        zh = 80
+        zh = self.wf_results[case]['zref']
         Dref = self.wf_results[case]['Dref']
         
         for turb in range(int(Ntx)):
@@ -396,17 +407,127 @@ class windfarm_post():
         fig.savefig(f'{case}_damping_layer.pdf' ,bbox_inches='tight')
         plt.show()
 
+
+    def plot_wt_rotors(self, case, ax):
+
+        color_turb  = 'black'       
+
+        xloc = self.wf_results[case]['wt_x']
+        yloc = self.wf_results[case]['wt_y']
+        Ntx  = len(xloc)
+        Nty  = len(yloc)
+        zh = self.wf_results[case]['zref']
+        Dref = self.wf_results[case]['Dref']
+
+        for turb in range(int(Ntx)):
+            x_turb = np.array([xloc[turb]-(xloc.min() + xloc.max())/2, xloc[turb]-(xloc.min() + xloc.max())/2]) / Dref
+            # x_turb = np.array([xloc[turb]-(xloc.min() + xloc.max())/2, xloc[turb]-(xloc.min() + xloc.max())/2]) 
+            z_turb = np.array([zh-Dref/2, zh+Dref/2])
+
+            ax.plot(x_turb, z_turb,
+                        color=color_turb,
+                        linewidth=1.25) 
+            
+
+        if  self.wf_results[case]['D_VS'] and self.wf_results[case]['z_VS']:
+
+            xloc = self.wf_results[case]['wt_x_VS'] 
+            yloc = self.wf_results[case]['wt_y_VS'] 
+            Ntx  = len(xloc)
+            Nty  = len(yloc)
+            zh = self.wf_results[case]['z_VS'] 
+            Dref = self.wf_results[case]['D_VS'] 
+
+
+            for turb in range(int(Ntx)):
+                x_turb = np.array([xloc[turb]-(xloc.min() + xloc.max())/2, xloc[turb]-(xloc.min() + xloc.max())/2]) / self.wf_results[case]['Dref']
+                # x_turb = np.array([xloc[turb]-(xloc.min() + xloc.max())/2, xloc[turb]-(xloc.min() + xloc.max())/2]) 
+                z_turb = np.array([zh-Dref/2, zh+Dref/2])
+                print('xturb', x_turb)
+                ax.plot(x_turb, z_turb,
+                            color=color_turb,
+                            linewidth=1.25)  
+
+
+
+    def spanwise_averaged_contours(self, vars = ['U', 'uw', 'duw_dz']):
+        """
+        Visualising contours of (spanwise averaged over wind farm width) field 
+        in the x-z plane
+
+        Parameters
+        ----------
+        vars : list of strings
+            variables to be visualised. Default is 
+            'U'     : velocity field, 
+            'uw'    : Reynolds stress field in the x-z direction ,
+            'duw_dz': Reynolds stress divergence in the x-z direction (indicative of wake recovery)
+        """
+
+        # load results
+        # spanwise average them if they are not already 
+        # loop over different cases
         
+        cmap        = mpl.cm.get_cmap('jet') 
+        color_turb  = 'black'                       
+        xlabel      = r'$x/D$ [-]'
+        ylabel      = r'$z$ [m]'
+        dashes      = (5,4)
+        xlim        = [-15, 20]
+        # xlim        = False
+        ylim        = [0,400]
+        cbar_bottom = 0.11
+        cbar_width  = 0.02
+        cbar_x      = 0.91
+
+        labels = [r'$\sqrt{\overline{u}^2+\overline{v}^2} / U_{\infty}$ [-]',
+                  r"$\overline{u'w'}$",
+                  r"$-\frac{D_{ref}}{k_{ref}}\frac{\partial \overline{u'w'}}{\partial z}$ [-]"]
+
+        cases = list(self.wf_results.keys())
     
+        for var in vars:
+            fig, ax = plt.subplots(len(cases), figsize=(9,7), sharex=True, sharey=True)
+
+            for icase, case in enumerate(cases):
+                data        =   self.wf_results[case]['data'][f'{var}_avg']
+
+                if var == 'U':
+                    vmin = 0.6
+                    vmax = 1.4
+                    label= labels[0]
+                elif var == 'duw_dz':
+                    data = - self.wf_results[case]['Dref'] / self.wf_results[case]['data']['tke_avg'][0,:].interp(z=self.wf_results[case]['zref']) * data
+                    vmin = -3
+                    vmax = 6
+                    label= labels[2]
+
+                X,Y = np.meshgrid(data.x/self.wf_results[case]['Dref'], data.z, indexing='ij')
+                levels = np.linspace(vmin, vmax, 30)
+                im1 = ax[icase].contourf(X, Y, data, levels, cmap=cmap, vmax=vmax, vmin=vmin)
+                self.plot_wt_rotors(case=case, ax=ax[icase])
+                ax[icase].set(title=case, ylabel=ylabel )
+                
+            ax[icase].set(ylim=ylim, xlim=xlim, xlabel=xlabel)
+
+
+            cbar    = fig.add_axes([cbar_x,cbar_bottom,cbar_width,1-cbar_bottom*2-0.018])
+            cb      = fig.colorbar(im1, cax=cbar)
+            cb.set_label(label,fontsize=15)
+            cb.update_ticks()
+
+            fig.savefig(f'Spanwise_averaged_{var}_contour.pdf' ,bbox_inches='tight')
+        plt.show()
 
 
 
 
 if __name__ == '__main__':
 
-    test = {'layout':           True,
-            'precursor' :       True,
-            'damping_layer':    True}
+    test = {'layout':                   True,
+            'precursor' :               False,
+            'damping_layer':            False,
+            'plot_spanwise_averaged':   True}
 
 
 
@@ -418,18 +539,18 @@ if __name__ == '__main__':
         wf_control.get_wt_locations()
         wf_control.center_wf()
         wf_vs       =   wind_farm_layout(nrows=4, ncols=4, Dref=90, zref=80, Sx=5, Sy=2.5)
-        wf_vs.get_wt_locations(D_VS=90, z_VS=90)
+        wf_vs.get_wt_locations(D_VS=172, z_VS=120)
         wf_vs.center_wf()
         print(wf_control.wt_x_pwe)    
         print(wf_control.wt_y_pwe)    
         print(wf_vs.wt_x_pwe)
         print(wf_vs.wt_y_pwe)    
 
-        show = False
+        show = True
         if show:
             fig, axs = plt.subplots(1,2,figsize=(9,2.5),sharex=True,sharey=True)
             xlim = [-1,16]
-            ylim = [-1,22]
+            ylim = [-1,12]
             normalise = wf_control.Dref
             axs[0].plot(wf_control.wt_x/normalise, wf_control.wt_y/normalise, 'ob', label='V90')
             axs[0].set(title='Control Wind Farm', 
@@ -444,7 +565,9 @@ if __name__ == '__main__':
 
             plt.legend(ncol=2)
             plt.savefig('RQ2_windfarm.pdf', bbox_inches='tight')
+            plt.show()
 
+            # wf_vs.visualise_wf()
 
     if test['precursor']: 
         """
@@ -467,10 +590,10 @@ if __name__ == '__main__':
         precursor.plot_precursor(case_list=cases,Dref=90,zref=80,savename='precursor_VS.pdf', **{'labels' : cases})
             
         plt.show()
-    
+
     if test['damping_layer']:
         """
-        Test windfarm_post() class
+        Test method: windfarm_post.examine_dampinglayer() 
         """       
         case        =   'control'
         forcemethod =   'Fix_con'
@@ -479,7 +602,7 @@ if __name__ == '__main__':
         Ti          =   0.1
         Uinf        =   1
         wind_farm   =   wf_control
-        Dref        =   80
+        Dref        =   90
 
         results = windfarm_post()
         results.load_wf_results(wind_farm, case, forcemethod, turbmodel, cells_D, Ti, Uinf, Dref)
@@ -492,6 +615,58 @@ if __name__ == '__main__':
 
         results.compute_spanwise_average(case)
         results.examine_dampinglayer(case)
+
+
+    if test['plot_spanwise_averaged']:
+        """
+        Test method: windfarm_post.plot_spanwise_averaged() 
+        """       
+        cases       =   ['control', 'VS_PO50', 'VS_PO25']
+        forcemethod =   'Fix_con'
+        turbmodel   =   'keABLcnfP'
+        cells_D     =   8
+        Ti          =   0.1
+        Uinf        =   1
+        Dref        =   90
+
+        # define wind farms
+        nrows=4
+        ncols=4 
+        Dref=90 
+        zref=80 
+        Sx=5 
+        Sy=2.5
+        D_VS = 172
+        z_VS = [False,                  # control wind farm (no tall turbines)
+                zref + D_VS/2,          # partial geometrical overlap 50% of the small rotor  
+                zref + Dref/4 + D_VS/2, # partial geometrical overlap 25% of the small rotor
+                zref + (Dref + D_VS)/2] # no geometrical overlap
+
+        wf_control = wind_farm_layout(nrows, ncols, Sx, Sy, Dref, zref)
+        wf_control.get_wt_locations()
+
+        wf_VSPO50 = wind_farm_layout(nrows, ncols, Sx, Sy, Dref, zref)
+        wf_VSPO50.get_wt_locations(D_VS=D_VS, z_VS=z_VS[1])
+
+        wf_VSPO25 = wind_farm_layout(nrows, ncols, Sx, Sy, Dref, zref)
+        wf_VSPO25.get_wt_locations(D_VS=D_VS, z_VS=z_VS[2])
+
+        wf_VSNO = wind_farm_layout(nrows, ncols, Sx, Sy, Dref, zref)
+        wf_VSNO.get_wt_locations(D_VS=D_VS, z_VS=z_VS[3])
+
+        wind_farm_list = [wf_control, wf_VSPO50, wf_VSPO25, wf_VSNO]
+
+        # Visualising results
+        results = windfarm_post()
+
+        # read result files and compute spanwise average
+        for icase, case in enumerate(cases):
+
+            results.load_wf_results(wind_farm=wind_farm_list[icase], 
+                                    case=case, forcemethod=forcemethod, turbmodel=turbmodel, 
+                                    cells_D=cells_D, Ti=Ti, Uinf=Uinf, Dref=Dref)
+        
+            results.compute_spanwise_average(case)        
         
 
-
+        results.spanwise_averaged_contours()
